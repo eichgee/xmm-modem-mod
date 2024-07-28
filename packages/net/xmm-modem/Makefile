@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=xmm-modem
-PKG_VERSION:=0.1.3.0
+PKG_VERSION:=0.1.3
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Henry Gustian <henrygustian@gmail.com>
 

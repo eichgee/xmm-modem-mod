@@ -72,6 +72,7 @@ return network.registerProtocol('xmm', {
 
 			return true;
 		};
+		o.default = 'internet';
 
 		s.taboption('general', form.Value, 'username', _('PAP/CHAP username'));
 
@@ -83,36 +84,15 @@ return network.registerProtocol('xmm', {
 		o.value('chap', 'CHAP');
 		o.default = 'auto';
 
-		o = s.taboption('advanced', form.Value, 'delay', _('Modem init timeout'), _('Maximum amount of seconds to wait for the modem to become ready'));
-		o.placeholder = '10';
-		o.datatype    = 'min(1)';
-
 		o = s.taboption('advanced', form.Value, 'mtu', _('Override MTU'));
 		o.placeholder = dev ? (dev.getMTU() || '1500') : '1500';
 		o.datatype    = 'max(9200)';
 
 		o = s.taboption('general', form.ListValue, 'pdp', _('PDP Type'));
-		o.value('ipv4v6', 'IPv4/IPv6');
 		o.value('ip', 'IPv4');
 		o.value('ipv6', 'IPv6');
-		o.default = 'ipv4v6';
-
-		o = s.taboption('advanced', form.Flag, 'defaultroute',
-			_('Use default gateway'),
-			_('If unchecked, no default route is configured'));
-		o.default = o.enabled;
-
-		o = s.taboption('advanced', form.Value, 'metric',
-			_('Use gateway metric'));
-			o.placeholder = '0';
-		o.datatype = 'uinteger';
-		o.depends('defaultroute', '1');
-
-		o = s.taboption('advanced', form.Flag, 'peerdns',
-			_('Use DNS servers advertised by peer'),
-			_('If unchecked, the advertised DNS server addresses are ignored'));
-		o.default = o.enabled;
-
+		o.value('ipv4v6', 'IPv4/IPv6');
+		o.default = 'ip';
 	}
 });
 

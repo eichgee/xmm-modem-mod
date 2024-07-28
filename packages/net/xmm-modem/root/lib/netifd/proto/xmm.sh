@@ -14,7 +14,6 @@ proto_xmm_init_config() {
     proto_config_add_string "device:device"
     proto_config_add_string "apn"
     proto_config_add_string "pdp"
-    proto_config_add_string "delay"
     proto_config_add_string "username"
     proto_config_add_string "password"
     proto_config_add_string "auth"
@@ -23,8 +22,8 @@ proto_xmm_init_config() {
 
 proto_xmm_setup() {
     local interface="$1"
-    local OX device ifname auth username password apn pdp delay $PROTO_DEFAULT_OPTIONS
-    json_get_vars device ifname auth username password apn pdp delay $PROTO_DEFAULT_OPTIONS
+    local OX device ifname auth username password apn pdp $PROTO_DEFAULT_OPTIONS
+    json_get_vars device ifname auth username password apn pdp $PROTO_DEFAULT_OPTIONS
 	
     [ "$metric" = "" ] && metric="0"
     [ -z $ifname ] && {
@@ -82,8 +81,7 @@ proto_xmm_setup() {
 			OX=$(runatcmd "$device" "AT+CFUN=1")
 		fi
 	else
-		local ATCMDD="AT+CGDCONT=1,\"$pdp\",\"$apn\""
-		OX=$(runatcmd "$device" "$ATCMDD")
+		OX=$(runatcmd "$device" "AT+CGDCONT=1,\"$pdp\",\"$apn\"")
 		
 		OX=$(runatcmd "$device" "AT+CFUN=4")
 		OX=$(runatcmd "$device" "AT+CFUN=1")
