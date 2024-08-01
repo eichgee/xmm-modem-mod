@@ -144,6 +144,9 @@ proto_xmm_setup() {
 
 		OX=$(runatcmd "$device" "AT+XDATACHANNEL=1,1,\"/USBCDC/2\",\"/USBHS/NCM/0\",2,$cid")
 
+        [ -n "$mtu" ] && ip link set dev "$ifname" mtu "$mtu"
+        ip link set dev $ifname arp off
+
         proto_init_update "$ifname" 1
         proto_add_data
         json_add_int reconnect 0
@@ -155,19 +158,17 @@ proto_xmm_setup() {
 
         [ "$pdp" = "IPV6" ] || [ "$pdp" = "IPV4V6" ] && [ "$v6cap" -gt 0 ] &&
             setup_ipv6_dhcp  "$interface" "$ifname" "$metric"
-        
-        [ -n "$mtu" ] && ip link set dev "$ifname" mtu "$mtu"
 		
 		OX=$(runatcmd "$device" "AT+CGDATA=\"M-RAW_IP\",$cid")
 		local RESP=$(echo $OX | sed "s/AT+CGDATA=\"M-RAW_IP\",$cid //")
 		echo "Final Modem result code is \"$RESP\""
 
+        [ "$synctime" = "1" ] && update_system_time_from_modem "$device"
+
         [ "$autorc" = "1" ] && {
             echo "Starting connection monitor"
             proto_run_command "$interface" sh "$XMM_LIB_PATH/ip-monitor.sh" $interface $ifname
         }
-
-        [ "$synctime" = "1" ] && update_system_time_from_modem "$device"
 	fi
 }
 
@@ -191,7 +192,7 @@ setup_ipv4_static(){
     [ "$defaultroute" = "" ] || [ "$defaultroute" = "1" ] &&
         proto_add_ipv4_route "0.0.0.0" 0 "$ip"
 
-    if [ "$peerdns" = "1" ]; then {
+    if [ "$peerdns" = "1" ]; then
         [ -n "$DNS1" ] && {
             proto_add_dns_server "$DNS1"
             echo "Adding IPV4 dns address $DNS1"
@@ -200,8 +201,8 @@ setup_ipv4_static(){
         [ -n "$DNS2" ] && {
             proto_add_dns_server "$DNS2"
             echo "Adding IPV4 dns address $DNS2"
-        }   
-    }
+        }
+    fi
 
     [ -n "$metric" ] && json_add_int metric "$metric"
 
