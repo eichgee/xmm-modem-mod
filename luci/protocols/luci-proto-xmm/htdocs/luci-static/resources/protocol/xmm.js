@@ -75,21 +75,18 @@ return network.registerProtocol("xmm", {
     o.placeholder = "internet";
 
     o = s.taboption("general", form.ListValue, "auth", _("Auth Type"));
-    o.value("auto", "Auto");
+    o.value("none", "None");
     o.value("pap", "PAP");
     o.value("chap", "CHAP");
-    o.value("none", "None");
     o.default = "none";
 
     o = s.taboption("general", form.Value, "username", _("PAP/CHAP username"));
     o.depends("auth", "pap");
     o.depends("auth", "chap");
-    o.depends("auth", "auto");
 
     o = s.taboption("general", form.Value, "password", _("PAP/CHAP password"));
     o.depends("auth", "pap");
     o.depends("auth", "chap");
-    o.depends("auth", "auto");
     o.password = true;
 
     o = s.taboption("general", form.ListValue, "pdp", _("PDP Type"));
@@ -104,15 +101,30 @@ return network.registerProtocol("xmm", {
 
     // ------tab advanced-------
 
-    o = s.taboption("advanced", form.Value, "mtu", _("Override MTU"));
-    o.placeholder = dev ? dev.getMTU() || "1500" : "1500";
-    o.datatype = "max(9200)";
-
     o = s.taboption(
       "advanced",
       form.Flag,
       "autorc",
-      _("Enable auto reconnection modem")
+      _("Auto reconnection"),
+      _("Enable auto reconnection when modem IP losts")
+    );
+    o.default = o.enabled;
+
+    o = s.taboption(
+      "advanced",
+      form.Flag,
+      "synctime",
+      _("Sync time"),
+      _("Sync system time with network time")
+    );
+    o.default = o.enabled;
+
+    o = s.taboption(
+      "advanced",
+      form.Flag,
+      "defaultroute",
+      _("Use default gateway"),
+      _("If unchecked, no default route is configured")
     );
     o.default = o.enabled;
 
@@ -126,14 +138,9 @@ return network.registerProtocol("xmm", {
     o.placeholder = "5";
     o.datatype = "min(0)";
 
-    o = s.taboption(
-      "advanced",
-      form.Flag,
-      "defaultroute",
-      _("Use default gateway"),
-      _("If unchecked, no default route is configured")
-    );
-    o.default = o.enabled;
+    o = s.taboption("advanced", form.Value, "mtu", _("Override MTU"));
+    o.placeholder = dev ? dev.getMTU() || "1500" : "1500";
+    o.datatype = "max(9200)";
 
     o = s.taboption(
       "advanced",
@@ -153,12 +160,7 @@ return network.registerProtocol("xmm", {
     o.depends("peerdns", "0");
     o.datatype = "ipaddr";
 
-    o = s.taboption(
-      "advanced",
-      form.Value,
-      "metric",
-      _("Use gateway metric")
-    );
+    o = s.taboption("advanced", form.Value, "metric", _("Use gateway metric"));
     o.datatype = "uinteger";
     o.placeholder = "0";
   },

@@ -21,13 +21,14 @@ proto_xmm_init_config() {
     proto_config_add_int "cid"
     proto_config_add_boolean "autorc"
     proto_config_add_int "mtu"
+    proto_config_add_boolean "synctime"
     proto_config_add_defaults
 }
 
 proto_xmm_setup() {
     local interface="$1"
-    local OX device ifname auth username password apn pdp delay cid autorc mtu $PROTO_DEFAULT_OPTIONS
-    json_get_vars device ifname auth username password apn pdp delay cid autorc mtu $PROTO_DEFAULT_OPTIONS
+    local OX device ifname auth username password apn pdp delay cid autorc mtu synctime $PROTO_DEFAULT_OPTIONS
+    json_get_vars device ifname auth username password apn pdp delay cid autorc mtu synctime $PROTO_DEFAULT_OPTIONS
 
     [ "$metric" = "" ] && metric="0"
     [ "$cid" = "" ] && cid="1"
@@ -35,6 +36,8 @@ proto_xmm_setup() {
     [ "$apn" = "" ] && apn="internet"
     [ "$delay" = "" ] && delay="5"
     [ "$mtu" = "" ] && mtu="1500"
+    [ "$synctime" = "" ] && synctime="1"
+    [ "$peerdns" = "" ] && peerdns="1"
     
     [ -z $ifname ] && {
 	    local devname devpath hwaddr
@@ -67,8 +70,8 @@ proto_xmm_setup() {
 	
     [ -n "$delay" ] && [ "$delay" -gt 0 ] && sleep "$delay"
 
-    [ "$auth" !=  "none" ] && [ -n "$auth" ] && {
-        echo "Using auth type is: $auth"
+    [ -n "$auth" ] && {
+        echo "Using auth type: $auth"
         case $auth in
         pap) AUTH=1 ;;
         chap) AUTH=2 ;;
@@ -78,7 +81,7 @@ proto_xmm_setup() {
         USER=$username 
         PASS=$password 
 
-        runatcmd "$device" "AT+XGAUTH=1,$AUTH,\"$USER\",\"$PASS\"" >/dev/null 2>&1
+        OX=$(runatcmd "$device" "AT+XGAUTH=$cid,$AUTH,\"$USER\",\"$PASS\"")
     }
 	
 	OX=$(runatcmd "$device" "AT+CGACT=0,$cid")
@@ -142,17 +145,16 @@ proto_xmm_setup() {
 		OX=$(runatcmd "$device" "AT+XDATACHANNEL=1,1,\"/USBCDC/2\",\"/USBHS/NCM/0\",2,$cid")
 
         proto_init_update "$ifname" 1
-        [ -n "$metric" ] && json_add_int metric "$metric"
         proto_add_data
         json_add_int reconnect 0
         proto_close_data
         proto_send_update "$interface"
 
         [ "$pdp" = "IP" ] || [ "$pdp" = "IPV4V6" ] &&
-            setup_ipv4 "$interface" "$ifname" "$ip" "$DNS1" "$DNS2" "$defaultroute"
+            setup_ipv4_static "$interface" "$ifname" "$ip" "$DNS1" "$DNS2" "$defaultroute" "$metric" "$peerdns"
 
         [ "$pdp" = "IPV6" ] || [ "$pdp" = "IPV4V6" ] && [ "$v6cap" -gt 0 ] &&
-            setup_ipv6 "$interface" "$ifname" "$ip6" "$DNS3" "$DNS4" "$defaultroute"
+            setup_ipv6_dhcp  "$interface" "$ifname" "$metric"
         
         [ -n "$mtu" ] && ip link set dev "$ifname" mtu "$mtu"
 		
@@ -164,67 +166,44 @@ proto_xmm_setup() {
             echo "Starting connection monitor"
             proto_run_command "$interface" sh "$XMM_LIB_PATH/ip-monitor.sh" $interface $ifname
         }
+
+        [ "$synctime" = "1" ] && update_system_time_from_modem "$device"
 	fi
 }
 
-setup_ipv4(){
+setup_ipv4_static(){
     local interface=$1
     local ifname=$2
     local ip=$3
     local DNS1=$4
     local DNS2=$5
     local defaultroute=$6
+    local metric=$7
+    local peerdns=$8
 
     proto_init_update "$ifname" 1
 
     proto_set_keep 1
-    ip link set dev $ifname arp off
-	proto_add_ipv4_address $ip 32
+    
     echo "Set IPV4 address to $ip"
+	proto_add_ipv4_address $ip 32
 
     [ "$defaultroute" = "" ] || [ "$defaultroute" = "1" ] &&
-        proto_add_ipv4_route "0.0.0.0" 0 $ip
+        proto_add_ipv4_route "0.0.0.0" 0 "$ip"
 
-    [ -n "$DNS1" ] && {
-        proto_add_dns_server "$DNS1"
-        echo "Adding IPV4 dns address $DNS1"
+    if [ "$peerdns" = "1" ]; then {
+        [ -n "$DNS1" ] && {
+            proto_add_dns_server "$DNS1"
+            echo "Adding IPV4 dns address $DNS1"
+        }
+
+        [ -n "$DNS2" ] && {
+            proto_add_dns_server "$DNS2"
+            echo "Adding IPV4 dns address $DNS2"
+        }   
     }
 
-    [ -n "$DNS2" ] && {
-        proto_add_dns_server "$DNS2"
-        echo "Adding IPV4 dns address $DNS2"
-    }
-
-    proto_send_update "$interface"
-}
-
-setup_ipv6(){
-    local interface=$1
-    local ifname=$2
-    local ip=$3
-    local DNS1=$4
-    local DNS2=$5
-    local defaultroute=$6
-
-    proto_init_update "$ifname" 1
-
-    proto_set_keep 1
-    ip link set dev $ifname arp off
-	proto_add_ipv6_address $ip 128
-    echo "Set IPV6 address to $ip"
-
-    [ "$defaultroute" = "" ] || [ "$defaultroute" = "1" ] &&
-        proto_add_ipv6_route "::0" 0
-
-    [ -n "$DNS1" ] && {
-        proto_add_dns_server "$DNS1"
-        echo "Adding IPV6 dns address $DNS1"
-    }
-
-    [ -n "$DNS2" ] && {
-        proto_add_dns_server "$DNS2"
-        echo "Adding IPV6 dns address $DNS2"
-    }
+    [ -n "$metric" ] && json_add_int metric "$metric"
 
     proto_send_update "$interface"
 }
@@ -232,17 +211,19 @@ setup_ipv6(){
 setup_ipv6_dhcp(){
     local interface=$1
     local ifname=$2
-    local ip6=$3
+    local metric=$3
 
-    ip -6 address add ${ip6}/64 dev $ifname
-    echo "Set IPV6 address to $ip6"
+    echo "Configure IPV6 dhcp address"
 
-	ip -6 route add default via "$ip6" dev "$ifname"
+    local zone="$(fw3 -q network "$interface" 2>/dev/null)"
     json_init
     json_add_string name "${interface}_6"
     json_add_string ifname "@$interface"
     json_add_string proto "dhcpv6"
     json_add_string extendprefix 1
+    [ -n "$zone" ] && json_add_string zone "$zone"
+    [ -n "$metric" ] && json_add_int metric "$metric"
+    # json_add_string iface_464xlat 0
     proto_add_dynamic_defaults
     json_close_object
     ubus call network add_dynamic "$(json_dump)"
@@ -256,14 +237,28 @@ runatcmd(){
 	gcom -d $device -s "$XMM_LIB_PATH/run-at.gcom" $opts
 }
 
+update_system_time_from_modem(){
+    local OX network_time device
+    device=$1
+
+    runatcmd "$device" "AT+CTZU=1" >/dev/null 2>&1
+    OX=$(runatcmd "$device" "AT+CCLK?")
+    if `echo "$OX" | grep -q "ERROR"`; then
+        echo "Unable to get network time"
+    else
+        network_time=$(echo "$OX" | sed -n 's/.*"\(.*\)".*/\1/p')
+        echo "Updating system time with value: $network_time"
+        OX=$(date -D '%y/%m/%d,%H:%M:%S' -s "$network_time")
+    fi
+}
+
 proto_xmm_teardown() {
     local interface="$1"
-    local device
+    local device OX
 	json_get_vars device
 	
     runatcmd "$device" "AT+CGACT=0" >/dev/null 2>&1
     runatcmd "$device" "AT+XDATACHANNEL=0" >/dev/null 2>&1
-	
     echo "Modem $device disconnected"
     proto_kill_command "$interface"
 }
