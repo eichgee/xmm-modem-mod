@@ -10,9 +10,12 @@ config interface 'wwan'
 	option pdp 'ip' # Connect method IPV4/6 version
 	option apn 'internet' # APN Cellular
 	option delay '10' # Delay interface to connect
-	optiom auth 'auto' # Auth type (auto, pap or chap)
+	optiom auth 'none' # Auth type (none, pap or chap)
 	option username 'username' # username 
 	option password 'password' # password
+	option cid '1' # PDP Context
+	option autorc '1' # Enable auto reconnection when modem IP losts"
+	option synctime '1' # Sync system time with network time
 ```
 
 # How-to configure interface via LuCi
