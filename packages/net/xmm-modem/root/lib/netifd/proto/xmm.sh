@@ -3,9 +3,9 @@
 XMM_LIB_PATH=/etc/xmmlib
 
 [ -n "$INCLUDE_ONLY" ] || {
-	. /lib/functions.sh
-	. ../netifd-proto.sh
-	init_proto "$@"
+    . /lib/functions.sh
+    . ../netifd-proto.sh
+    init_proto "$@"
 }
 
 proto_xmm_init_config() {
@@ -38,9 +38,9 @@ proto_xmm_setup() {
     [ "$mtu" = "" ] && mtu="1500"
     [ "$synctime" = "" ] && synctime="1"
     [ "$peerdns" = "" ] && peerdns="1"
-    
-    [ -z $ifname ] && {
-	    local devname devpath hwaddr
+
+    [ -z "$ifname" ] && {
+        local devname devpath hwaddr
         devname=$(basename $device)
         case "$devname" in
         *ttyACM*)
@@ -50,24 +50,24 @@ proto_xmm_setup() {
             hwaddr="$(ls -1 $devpath/../*/net/*/*address*)"
             for h in $hwaddr; do
                 if [ "$(cat ${h})" = "00:00:11:12:13:14" ]; then
-                    ifname=$(echo ${h} | awk -F [\/] '{print $(NF-1)}')
+                    ifname=$(echo ${h} | awk -F '[\/]' '{print $(NF-1)}')
                 fi
             done
             ;;
         esac
     }
 
-    [ -n "$ifname" ] && {
+    if [ -n "$ifname" ]; then
         echo "Found device $ifname"
-    } || {
+    else
         echo "Could not get device from port $device"
         proto_notify_error "$interface" DEVICE_NOT_FOUND
         proto_set_available "$interface" 0
         return 1
-    }
+    fi
 
     echo "Setting up $ifname"
-	
+
     [ -n "$delay" ] && [ "$delay" -gt 0 ] && sleep "$delay"
 
     [ -n "$auth" ] && {
@@ -77,117 +77,103 @@ proto_xmm_setup() {
         chap) AUTH=2 ;;
         *) AUTH=0 ;;
         esac
-        AUTH=$AUTH 
-        USER=$username 
-        PASS=$password 
+
+        USER=$username
+        PASS=$password
 
         OX=$(runatcmd "$device" "AT+XGAUTH=$cid,$AUTH,\"$USER\",\"$PASS\"")
     }
-	
-	OX=$(runatcmd "$device" "AT+CGACT=0,$cid")
-	OX=$(runatcmd "$device" "AT+CGDCONT?;+CFUN?")
-	
+
+    OX=$(runatcmd "$device" "AT+CGACT=0,$cid")
+    OX=$(runatcmd "$device" "AT+CGDCONT?;+CFUN?")
+
     pdp=$(echo $pdp | awk '{print toupper($0)}')
-    [ "$pdp" = "IP" -o "$pdp" = "IPV6" -o "$pdp" = "IPV4V6" ] || pdp="IP"
-    
-	if `echo $OX | grep "+CGDCONT: $cid,\"$pdp\",\"$apn\"," 1>/dev/null 2>&1`
-	then
-		if [ -z "$(echo $OX | grep -o "+CFUN: 1")" ]; then
-			OX=$(runatcmd "$device" "AT+CFUN=1")
-		fi
-	else
-		OX=$(runatcmd "$device" "AT+CGDCONT=$cid,\"$pdp\",\"$apn\"")
-		
-		OX=$(runatcmd "$device" "AT+CFUN=4")
-		OX=$(runatcmd "$device" "AT+CFUN=1")
-		sleep 5
-	fi
-	
-	OX=$(runatcmd "$device" "AT+CGPIAF=1,0,0,0;+XDNS=$cid,1;+XDNS=$cid,2")
-	OX=$(runatcmd "$device" "AT+CGACT=1,$cid")
-	
-	local ERROR="ERROR"
-	OX=$(runatcmd "$device" "AT+CGCONTRDP=$cid")
-	if `echo "$OX" | grep -q "$ERROR"`; then
-		echo "Failed to get IP information for context $cid"
-		proto_notify_error "$interface" CONFIGURE_FAILED
+    [ "$pdp" = "IP" ] || [ "$pdp" = "IPV6" ] || [ "$pdp" = "IPV4V6" ] || pdp="IP"
+
+    if echo $OX | grep "+CGDCONT: $cid,\"$pdp\",\"$apn\"," 1>/dev/null 2>&1; then
+        if [ -z "$(echo $OX | grep -o "+CFUN: 1")" ]; then
+            OX=$(runatcmd "$device" "AT+CFUN=1")
+        fi
+    else
+        OX=$(runatcmd "$device" "AT+CGDCONT=$cid,\"$pdp\",\"$apn\"")
+
+        OX=$(runatcmd "$device" "AT+CFUN=4")
+        OX=$(runatcmd "$device" "AT+CFUN=1")
+        sleep 5
+    fi
+
+    OX=$(runatcmd "$device" "AT+CGPIAF=1,0,0,0;+XDNS=$cid,1;+XDNS=$cid,2")
+    OX=$(runatcmd "$device" "AT+CGACT=1,$cid")
+
+    local ERROR="ERROR"
+    OX=$(runatcmd "$device" "AT+CGCONTRDP=$cid")
+    if echo "$OX" | grep -q "$ERROR"; then
+        echo "Failed to get IP information for context $cid"
+        proto_notify_error "$interface" CONFIGURE_FAILED
         return 1
-	else
-	    local DNS1 DNS2 DNS3 DNS4 ip ip6 OX6 v6cap nat46
-	    OX=$(echo "${OX//[\" ]/}")
-	    ip=$(echo $OX | cut -d, -f4 | grep -o "[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}")
-		ip=$(echo $ip | cut -d' ' -f1)
-	    DNS1=$(echo $OX | cut -d, -f6)
-		DNS2=$(echo $OX | cut -d, -f7)
-		OX6=$(echo $OX | grep -o "+CGCONTRDP:$cid,[0-9]\+,[^,]\+,[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}.\+")
-		ip6=$(echo $OX6 | grep -o "[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}")
-		ip6=$(echo $ip6 | cut -d' ' -f1)
-        DNS3=$(echo "$OX6" | cut -d, -f6)
-		DNS4=$(echo "$OX6" | cut -d, -f7)
-		
+    else
+        local DNS1 DNS2 ip ip6 OX6 v6cap RESP
+        OX=$(echo "${OX//[\" ]/}")
+        ip=$(echo $OX | cut -d, -f4 | grep -o "[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}")
+        ip=$(echo $ip | cut -d' ' -f1)
+        DNS1=$(echo $OX | cut -d, -f6)
+        DNS2=$(echo $OX | cut -d, -f7)
+        OX6=$(echo $OX | grep -o "+CGCONTRDP:$cid,[0-9]\+,[^,]\+,[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}.\+")
+        ip6=$(echo $OX6 | grep -o "[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}:[0-9A-F]\{1,4\}")
+        ip6=$(echo $ip6 | cut -d' ' -f1)
+
         echo "PDP type is: $pdp"
 
-		if [[ $(echo "$ip6" | grep -o "^[23]") ]]; then
-			# Global unicast IP acquired
-			v6cap=1
-		elif [[ $(echo "$ip6" | grep -o "^[0-9a-fA-F]\{1,4\}:") ]]; then
-			# non-routable address
-			v6cap=2
-		else
-			v6cap=0
-		fi
+        if [[ $(echo "$ip6" | grep -o "^[23]") ]]; then
+            # Global unicast IP acquired
+            v6cap=1
+        elif [[ $(echo "$ip6" | grep -o "^[0-9a-fA-F]\{1,4\}:") ]]; then
+            # non-routable address
+            v6cap=2
+        else
+            v6cap=0
+        fi
 
-		if [ -n "$ip6" -a -z "$ip" ]; then
-			#echo "Running IPv6-only mode"
-			nat46=1
-		fi
-
-		OX=$(runatcmd "$device" "AT+XDATACHANNEL=1,1,\"/USBCDC/2\",\"/USBHS/NCM/0\",2,$cid")
+        OX=$(runatcmd "$device" "AT+XDATACHANNEL=1,1,\"/USBCDC/2\",\"/USBHS/NCM/0\",2,$cid")
 
         [ -n "$mtu" ] && ip link set dev "$ifname" mtu "$mtu"
         ip link set dev $ifname arp off
-
-        proto_init_update "$ifname" 1
-        proto_add_data
-        json_add_int reconnect 0
-        proto_close_data
-        proto_send_update "$interface"
 
         [ "$pdp" = "IP" ] || [ "$pdp" = "IPV4V6" ] &&
             setup_ipv4_static "$interface" "$ifname" "$ip" "$DNS1" "$DNS2" "$defaultroute" "$metric" "$peerdns"
 
         [ "$pdp" = "IPV6" ] || [ "$pdp" = "IPV4V6" ] && [ "$v6cap" -gt 0 ] &&
-            setup_ipv6_dhcp  "$interface" "$ifname" "$metric"
-		
-		OX=$(runatcmd "$device" "AT+CGDATA=\"M-RAW_IP\",$cid")
-		local RESP=$(echo $OX | sed "s/AT+CGDATA=\"M-RAW_IP\",$cid //")
-		echo "Final Modem result code is \"$RESP\""
+            setup_ipv6_dhcp "$interface" "$ifname" "$metric"
+
+        OX=$(runatcmd "$device" "AT+CGDATA=\"M-RAW_IP\",$cid")
+        RESP=$(echo $OX | sed "s/AT+CGDATA=\"M-RAW_IP\",$cid //")
+        echo "Final Modem result code is \"$RESP\""
 
         [ "$synctime" = "1" ] && update_system_time_from_modem "$device"
 
         [ "$autorc" = "1" ] && {
             echo "Starting connection monitor"
-            proto_run_command "$interface" sh "$XMM_LIB_PATH/ip-monitor.sh" $interface $ifname
+            proto_run_command "$interface" sh "$XMM_LIB_PATH/ip-monitor.sh" "$interface" "$ifname"
         }
-	fi
+    fi
 }
 
-setup_ipv4_static(){
-    local interface=$1
-    local ifname=$2
-    local ip=$3
-    local DNS1=$4
-    local DNS2=$5
-    local defaultroute=$6
-    local metric=$7
-    local peerdns=$8
+setup_ipv4_static() {
+    local interface="$1"
+    local ifname="$2"
+    local ip="$3"
+    local DNS1="$4"
+    local DNS2="$5"
+    local defaultroute="$6"
+    local metric="$7"
+    local peerdns="$8"
 
     proto_init_update "$ifname" 1
 
     proto_set_keep 1
-    
+
     echo "Set IPV4 address to $ip"
-	proto_add_ipv4_address $ip 32
+    proto_add_ipv4_address "$ip" 32
 
     [ "$defaultroute" = "" ] || [ "$defaultroute" = "1" ] &&
         proto_add_ipv4_route "0.0.0.0" 0 "$ip"
@@ -209,14 +195,15 @@ setup_ipv4_static(){
     proto_send_update "$interface"
 }
 
-setup_ipv6_dhcp(){
-    local interface=$1
-    local ifname=$2
-    local metric=$3
+setup_ipv6_dhcp() {
+    local interface="$1"
+    local ifname="$2"
+    local metric="$3"
+    local zone
 
     echo "Configure IPV6 dhcp address"
 
-    local zone="$(fw3 -q network "$interface" 2>/dev/null)"
+    zone="$(fw3 -q network "$interface" 2>/dev/null)"
     json_init
     json_add_string name "${interface}_6"
     json_add_string ifname "@$interface"
@@ -230,21 +217,19 @@ setup_ipv6_dhcp(){
     ubus call network add_dynamic "$(json_dump)"
 }
 
-runatcmd(){
-    local device opts
-    device=$1
-	export ATCMD=$2
-    opts=$3
-	gcom -d $device -s "$XMM_LIB_PATH/run-at.gcom" $opts
+runatcmd() {
+    local device="$1"
+    export ATCMD="$2"
+    gcom -d $device -s "$XMM_LIB_PATH/run-at.gcom"
 }
 
-update_system_time_from_modem(){
+update_system_time_from_modem() {
     local OX network_time device
     device=$1
 
     runatcmd "$device" "AT+CTZU=1" >/dev/null 2>&1
     OX=$(runatcmd "$device" "AT+CCLK?")
-    if `echo "$OX" | grep -q "ERROR"`; then
+    if echo "$OX" | grep -q "ERROR"; then
         echo "Unable to get network time"
     else
         network_time=$(echo "$OX" | sed -n 's/.*"\(.*\)".*/\1/p')
@@ -256,8 +241,8 @@ update_system_time_from_modem(){
 proto_xmm_teardown() {
     local interface="$1"
     local device OX
-	json_get_vars device
-	
+    json_get_vars device
+
     runatcmd "$device" "AT+CGACT=0" >/dev/null 2>&1
     runatcmd "$device" "AT+XDATACHANNEL=0" >/dev/null 2>&1
     echo "Modem $device disconnected"
