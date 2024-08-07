@@ -32,7 +32,9 @@ while IFS= read -r line <$monitor_pipe; do
     if [ "$if_state" = "1" ] && [ "$dev_state" = "DOWN" ]; then
         echo "$ifname ip link is down, restarting interface"
 
-        ifdown $interface
+        proto_init_update "$ifname" 0
+        proto_send_update "$interface"
+        proto_kill_command "$interface"
         sleep 1
         ifup $interface
 
@@ -42,4 +44,4 @@ done &
 loop_pid=$!
 
 trap stopMonitor SIGHUP SIGTERM SIGKILL SIGINT EXIT INT
-wait $monitor_pid
+wait $loop_pid
